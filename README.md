@@ -1,2 +1,2 @@
 # ADS
-Trabalho realizado em faculdade -PIM
+Trabalho em grupo realizado em faculdade -PIM
