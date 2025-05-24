@@ -1,0 +1,257 @@
+import json
+import os
+import re
+import hashlib
+import time
+from statistics import mean, median, mode
+
+ARQUIVO_DADOS = "usuarios.json"
+ADMIN_EMAIL = "admin@conectaeduca.com"
+ADMIN_SENHA = hashlib.sha256("Admin123".encode()).hexdigest()  # senha criptografada
+
+# === Funções de validação ===
+def validar_inteiro(msg):
+    while True:
+        entrada = input(msg)
+        if entrada.strip().lower() in ["sair", "cancelar"]:
+            raise KeyboardInterrupt
+        try:
+            return int(entrada)
+        except ValueError:
+            print("Entrada inválida. Digite um número inteiro.")
+
+def validar_float(msg):
+    while True:
+        entrada = input(msg)
+        if entrada.strip().lower() in ["sair", "cancelar"]:
+            raise KeyboardInterrupt
+        try:
+            return float(entrada)
+        except ValueError:
+            print("Entrada inválida. Digite um número decimal.")
+
+# === Criptografia de senha ===
+def criptografar_senha(senha):
+    return hashlib.sha256(senha.encode()).hexdigest()
+
+# === Operações com arquivo JSON ===
+def carregar_dados():
+    if os.path.exists(ARQUIVO_DADOS):
+        with open(ARQUIVO_DADOS, "r") as f:
+            return json.load(f)
+    return []
+
+def salvar_dados(dados):
+    with open(ARQUIVO_DADOS, "w") as f:
+        json.dump(dados, f, indent=4)
+
+# === Validações de e-mail e senha ===
+def email_existe(dados, email):
+    return any(usuario["email"] == email for usuario in dados)
+
+def senha_valida(senha):
+    return bool(
+        re.search(r"[A-Z]", senha) and
+        re.search(r"[a-z]", senha) and
+        re.search(r"[0-9]", senha)
+    )
+
+# === Cadastro de usuário ===
+def cadastrar_usuario(dados):
+    print("\n📄 Termo de Uso e Política de Privacidade")
+    print("Coletamos apenas nome, idade, e-mail, cidade, curso e tempo de uso.")
+    print("Essas informações são usadas para fins educacionais e estatísticos.")
+    print("Seus dados não serão compartilhados com terceiros.")
+    print("Você pode acessá-los, atualizá-los ou excluí-los a qualquer momento.")
+    consentimento = input("Você concorda com isso? (sim/não)").strip().lower()
+
+    if consentimento in ["nao", "não", "sair", "cancelar"]:
+        print("Cadastro cancelado.\n")
+        return
+
+    def entrada_segura(mensagem):
+        entrada = input(mensagem)
+        if entrada.strip().lower() in ["sair", "cancelar"]:
+            raise KeyboardInterrupt
+        return entrada
+
+    try:
+        print("\nATENÇÃO! \nPara cancelar o cadastro basta digitar 'sair' ou 'cancelar'\n")
+        time.sleep(2)
+
+        nome = entrada_segura("Nome do usuário: ")
+        idade = validar_inteiro("Idade: ")
+        cidade = entrada_segura("Cidade: ")
+        email = entrada_segura("E-mail: ").strip().lower()
+
+        if email_existe(dados, email):
+            print("Este e-mail já está cadastrado. Tente novamente com outro.\n")
+            return
+
+        while True:
+            senha = entrada_segura("Senha (deve conter letra maiúscula, minúscula e número): ")
+            if senha_valida(senha):
+                senha_criptografada = criptografar_senha(senha)
+                break
+            else:
+                print("Senha fraca. Tente novamente.\n")
+
+        curso = entrada_segura("Curso acessado: ")
+        tempo = validar_float("Tempo de uso (em horas): ")
+
+        usuario = {
+            "nome": nome,
+            "idade": idade,
+            "cidade": cidade,
+            "email": email,
+            "senha": senha_criptografada,
+            "curso": curso,
+            "tempo": tempo
+        }
+
+        dados.append(usuario)
+        salvar_dados(dados)
+        print("Usuário cadastrado com sucesso!\n")
+
+    except KeyboardInterrupt:
+        print("\nCadastro cancelado pelo usuário.\n")
+
+# === Estatísticas com dados ===
+def formatar_tempo(horas):
+    h = int(horas)
+    m = int((horas - h) * 60)
+    return f"{h}h {m}min"
+
+def mostrar_estatisticas(dados):
+    if not dados:
+        print("Nenhum dado disponível.\n")
+        return
+
+    idades = [u["idade"] for u in dados]
+    tempos = [u["tempo"] for u in dados]
+
+    print(f"Média de idade: {mean(idades):.0f}")
+    print(f"Mediana de idade: {median(idades):.0f}")
+    print(f"Média de tempo de uso: {formatar_tempo(mean(tempos))}")
+    print(f"Mediana de tempo de uso: {formatar_tempo(median(tempos))}")
+
+    try:
+        print(f"Idade mais comum: {mode(idades)} anos")
+    except:
+        print("Não há moda definida para idades.")
+
+    try:
+        print(f"Tempo de uso mais comum: {formatar_tempo(mode(tempos))}\n")
+    except:
+        print("Não há moda definida para tempo de uso.\n")
+
+# === Autenticação de usuário ===
+def autenticar_usuario(dados):
+    email = input("Digite seu e-mail: ")
+    senha = input("Digite sua senha: ")
+    senha_criptografada = criptografar_senha(senha)
+
+    if email == ADMIN_EMAIL and senha_criptografada == ADMIN_SENHA:
+        return "admin"
+
+    for usuario in dados:
+        if usuario["email"] == email and usuario["senha"] == senha_criptografada:
+            return usuario
+    return None
+
+# === Menu de administrador ===
+def menu_administrador(dados):
+    while True:
+        print("\n=== Menu do Administrador ===")
+        print("1. Ver todos os usuários")
+        print("2. Atualizar usuário")
+        print("3. Excluir usuário")
+        print("4. Voltar")
+
+        opcao = input("Escolha uma opção: ")
+
+        if opcao == "1":
+            for u in dados:
+                print(json.dumps(u, indent=4))
+        elif opcao == "2":
+            email = input("Digite o e-mail do usuário a ser atualizado: ")
+            usuario = next((u for u in dados if u["email"] == email), None)
+            if usuario:
+                usuario["nome"] = input("Novo nome: ")
+                usuario["idade"] = validar_inteiro("Nova idade: ")
+                usuario["cidade"] = input("Nova cidade: ")
+                usuario["curso"] = input("Novo curso: ")
+                usuario["tempo"] = validar_float("Novo tempo de uso (em horas): ")
+                salvar_dados(dados)
+                print("Dados atualizados com sucesso.\n")
+            else:
+                print("Usuário não encontrado.")
+        elif opcao == "3":
+            email = input("Digite o e-mail do usuário a ser excluído: ")
+            usuario = next((u for u in dados if u["email"] == email), None)
+            if usuario:
+                dados.remove(usuario)
+                salvar_dados(dados)
+                print("Usuário excluído com sucesso.\n")
+            else:
+                print("Usuário não encontrado.")
+        elif opcao == "4":
+            break
+        else:
+            print("Opção inválida.\n")
+
+# === Gerenciar dados do próprio usuário ===
+def gerenciar_dados(dados):
+    usuario = autenticar_usuario(dados)
+    if not usuario:
+        print("E-mail ou senha incorretos.\n")
+        return
+
+    if usuario == "admin":
+        menu_administrador(dados)
+        return
+
+    print("\nSeus dados:")
+    print(json.dumps(usuario, indent=4))
+    print("\n1. Atualizar dados\n2. Excluir conta\n3. Voltar")
+    opcao = input("Escolha uma opção: ")
+
+    if opcao == "1":
+        usuario["nome"] = input("Novo nome: ")
+        usuario["idade"] = validar_inteiro("Nova idade: ")
+        usuario["cidade"] = input("Nova cidade: ")
+        usuario["curso"] = input("Novo curso: ")
+        usuario["tempo"] = validar_float("Novo tempo de uso (em horas): ")
+        salvar_dados(dados)
+        print("Dados atualizados com sucesso.\n")
+    elif opcao == "2":
+        dados.remove(usuario)
+        salvar_dados(dados)
+        print("Conta excluída com sucesso.\n")
+
+# === Menu principal ===
+def menu():
+    dados = carregar_dados()
+
+    while True:
+        print("=== CONECTAEDUCA ===")
+        print("1. Cadastrar novo usuário")
+        print("2. Mostrar estatísticas")
+        print("3. Gerenciar meus dados")
+        print("4. Sair")
+        opcao = input("Escolha uma opção: ")
+
+        if opcao == "1":
+            cadastrar_usuario(dados)
+        elif opcao == "2":
+            mostrar_estatisticas(dados)
+        elif opcao == "3":
+            gerenciar_dados(dados)
+        elif opcao == "4":
+            print("Saindo do sistema...")
+            break
+        else:
+            print("Opção inválida!\n")
+
+if __name__ == "__main__":
+    menu()
